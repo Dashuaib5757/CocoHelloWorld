@@ -1,40 +1,50 @@
-import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
+import type { CSSProperties } from "react";
+import { createClient } from "@/lib/supabase/server";
+
+const COLORS = ["#ff5a5f", "#ffc93c", "#2ec4b6", "#a78bfa", "#ff9f1c"];
 
 export default async function Home() {
-  const { data: items, error } = await supabase
-      .from("helloworld")
-      .select("*");
+    const supabase = await createClient();
 
-  if (error) {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: items, error } = await supabase
+        .from("helloworld")
+        .select("*")
+        .order("id");
+
     return (
-        <div style={{ padding: "2rem" }}>
-          <h1>Error loading data</h1>
-          <p>{error.message}</p>
+        <div style={{ padding: "2rem", maxWidth: "640px", margin: "0 auto" }}>
+            <div style={{ textAlign: "right", marginBottom: "1.5rem" }}>
+                {user ? (
+                    <Link href="/dashboard">Dashboard</Link>
+                ) : (
+                    <Link href="/login">Prove you&apos;re not a raccoon</Link>
+                )}
+            </div>
+
+            <h1 style={{ fontSize: "2.4rem", marginBottom: "0.5rem" }}>
+                Welcome to the Funny Business
+            </h1>
+            <p style={{ marginBottom: "2rem", fontSize: "1.1rem" }}>
+                Please laugh responsibly. Rules apply.
+            </p>
+
+            {error && <p>Error loading data: {error.message}</p>}
+
+            <ul style={{ listStyle: "none", padding: 0 }}>
+                {items?.map((item, index) => (
+                    <li
+                        key={item.id}
+                        className="rule-card"
+                        style={{ "--accent": COLORS[index % COLORS.length] } as CSSProperties}
+                    >
+                        <h2 style={{ fontSize: "1.2rem", margin: 0 }}>{item.name}</h2>
+                        <p style={{ margin: "0.5rem 0 0" }}>{item.description}</p>
+                    </li>
+                ))}
+            </ul>
         </div>
     );
-  }
-
-  return (
-      <div style={{ padding: "2rem", maxWidth: "600px", margin: "0 auto" }}>
-        <h1 style={{ fontSize: "2rem", marginBottom: "1.5rem" }}>My Items</h1>
-        <ul style={{ listStyle: "none", padding: 0 }}>
-          {items?.map((item) => (
-              <li
-                  key={item.id}
-                  style={{
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                    padding: "1rem",
-                    marginBottom: "1rem",
-                  }}
-              >
-                <h2 style={{ fontSize: "1.25rem", margin: 0 }}>{item.name}</h2>
-                <p style={{ color: "#666", margin: "0.5rem 0 0" }}>
-                  {item.description}
-                </p>
-              </li>
-          ))}
-        </ul>
-      </div>
-  );
 }
