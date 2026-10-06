@@ -45,6 +45,12 @@ export default async function Home() {
                     </li>
                 ))}
             </ul>
+
+            <div style={{ textAlign: "center", margin: "2.5rem 0 3rem" }}>
+                <Link href={user ? "/generate" : "/login"} className="jake-lab-button">
+                    Jake Lab
+                </Link>
+            </div>
         </div>
     );
 }

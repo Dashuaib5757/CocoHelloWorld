@@ -162,3 +162,42 @@ p {
     display: none;
   }
 }
+
+/* Big Jake Lab button */
+.jake-lab-button {
+  display: inline-block;
+  background: #ffc93c;
+  color: #0b3550;
+  font-size: 2.2rem;
+  padding: 1.2rem 3rem;
+  border-radius: 999px;
+  text-decoration: none;
+  box-shadow: 0 8px 0 rgba(11, 53, 80, 0.3);
+  animation: bob 3s ease-in-out infinite;
+}
+
+.jake-lab-button:hover {
+  background: #ff5a5f;
+  color: #ffffff;
+}
+
+@keyframes bob {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Vote buttons */
+.vote-btn {
+  padding: 0.3rem 0.9rem !important;
+  font-size: 0.95rem;
+  opacity: 0.55;
+}
+
+.vote-btn.active {
+  background: #2ec4b6 !important;
+  opacity: 1;
+}
