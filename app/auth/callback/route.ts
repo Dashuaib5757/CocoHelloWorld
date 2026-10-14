@@ -4,7 +4,10 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
     const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
-    const next = searchParams.get('next') ?? '/'
+
+    // After login, land in the Joke Ocean (only allow paths on this site)
+    const requested = searchParams.get('next') ?? '/ocean'
+    const next = requested.startsWith('/') && !requested.startsWith('//') ? requested : '/ocean'
 
     if (code) {
         const supabase = await createClient()

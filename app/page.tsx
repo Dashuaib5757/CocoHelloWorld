@@ -46,10 +46,20 @@ export default async function Home() {
                 ))}
             </ul>
 
-            <div style={{ textAlign: "center", margin: "2.5rem 0 3rem" }}>
-                <Link href={user ? "/generate" : "/login"} className="jake-lab-button">
-                    Jake Lab
-                </Link>
+            <div className="home-cta">
+                <div>
+                    <Link href="/ocean" className="ocean-button">
+                        Dive into the Joke Ocean
+                    </Link>
+                    <small>Funny jokes float up. Flops sink. You decide.</small>
+                </div>
+
+                <div>
+                    <Link href="/generate" className="jake-lab-button">
+                        Jake Lab
+                    </Link>
+                    <small>Make your own joke and meme.</small>
+                </div>
             </div>
         </div>
     );

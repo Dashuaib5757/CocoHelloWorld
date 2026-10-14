@@ -4,6 +4,96 @@ import { createClient } from '@/lib/supabase/server'
 
 const DAILY_LIMIT = 10
 
+const FORMATS = [
+    'a one-liner with a surprising twist at the end',
+    'a setup and punchline, where the punchline is a double meaning',
+    'a deadpan observation that is painfully true',
+    'an exaggeration so extreme it becomes absurd',
+]
+
+function buildPrompt(topic: string, format: string) {
+    return `You are a sharp stand-up comedy writer. Write ONE joke about: "${topic}".
+Format: ${format}.
+
+Rules for the joke:
+- Under 22 words. One clear idea. A double meaning or a twist.
+- Joke about situations and objects, never about types of people.
+- No complaining, no meanness, nothing offensive.
+- Audience: college students in New York City.
+
+Then write a picture prompt for a funny cartoon illustration that goes with the joke:
+- Describe a single simple scene with one clear subject.
+- Colorful cartoon style.
+- No real people, no famous characters or brands.
+- Do NOT put any words or letters in the picture.
+
+Reply with ONLY valid JSON in exactly this shape:
+{"joke": "the joke text", "image_prompt": "the picture description"}`
+}
+
+async function askGemini(prompt: string) {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+    const models = [
+        process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+        process.env.GEMINI_FALLBACK_MODEL,
+    ].filter(Boolean) as string[]
+
+    let lastError = ''
+    for (const model of models) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: prompt,
+                    config: { responseMimeType: 'application/json' },
+                })
+                const parsed = JSON.parse(response.text ?? '')
+                if (typeof parsed.joke === 'string' && parsed.joke.trim()) {
+                    return {
+                        joke: parsed.joke.trim() as string,
+                        imagePrompt: String(parsed.image_prompt ?? '').trim(),
+                    }
+                }
+                lastError = 'The AI sent back an empty joke.'
+            } catch (e) {
+                lastError = e instanceof Error ? e.message : 'Unknown AI error'
+                const retryable = /503|UNAVAILABLE|overloaded|high demand/i.test(lastError)
+                if (!retryable) break
+            }
+        }
+    }
+    throw new Error(lastError)
+}
+
+async function makeMemeBytes(imagePrompt: string): Promise<Buffer | null> {
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+    const token = process.env.CLOUDFLARE_API_TOKEN
+    if (!accountId || !token || !imagePrompt) return null
+
+    const fullPrompt = `${imagePrompt}. Colorful funny cartoon illustration, clean simple composition, no text, no words, no letters, no watermark, no signature.`
+
+    try {
+        const res = await fetch(
+            `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+            {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt: fullPrompt, steps: 4 }),
+            }
+        )
+        if (!res.ok) return null
+        const json = await res.json()
+        const base64: string | undefined = json?.result?.image ?? json?.image
+        if (!base64) return null
+        return Buffer.from(base64, 'base64')
+    } catch {
+        return null
+    }
+}
+
 export async function POST(request: Request) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -12,7 +102,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const topic = typeof body.topic === 'string' ? body.topic.trim() : ''
+    const topic = String(body.topic ?? '').trim()
     if (topic.length < 2 || topic.length > 100) {
         return NextResponse.json(
             { error: 'Topic must be between 2 and 100 characters.' },
@@ -20,7 +110,6 @@ export async function POST(request: Request) {
         )
     }
 
-    // Protect the free AI quota: limit each user per day
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const { count } = await supabase
         .from('jokes')
@@ -29,71 +118,52 @@ export async function POST(request: Request) {
         .gte('created_at', since)
     if ((count ?? 0) >= DAILY_LIMIT) {
         return NextResponse.json(
-            { error: `Daily limit of ${DAILY_LIMIT} jokes reached. Come back tomorrow.` },
+            { error: `Daily limit reached (${DAILY_LIMIT} jokes per day). Come back tomorrow!` },
             { status: 429 }
         )
     }
 
-    const formats = [
-        'a question-and-answer pun, where the setup is a question and the punchline is a pun',
-        'a deadpan one-liner with a surprise twist in the last few words',
-        'a joke that starts "I told my..." and where the final word flips the meaning',
-        'a two-line exchange between two characters where the second line is the punchline',
-    ]
-    const format = formats[Math.floor(Math.random() * formats.length)]
+    const format = FORMATS[Math.floor(Math.random() * FORMATS.length)]
+    const prompt = buildPrompt(topic, format)
 
-    const prompt = `You are a sharp stand-up comedy writer. The topic is: "${topic}".
-Write the joke as ${format}.
-Silently draft 5 versions, then output only the funniest one.
-Rules:
-- Under 22 words
-- Build the joke on ONE clear idea or double meaning that links the setup to the punchline
-- Someone reading it must understand why it is funny right away. Never combine unrelated ideas at random
-- Prefer wordplay or a real everyday observation over absurd mashups
-- No complaining, no scene-setting, and make fun of situations and objects, never of types of people
-- Clean language
-- The audience is college students in New York City
-Output only the joke text.`
-
-    let text: string | undefined
-    const models = [
-        process.env.GEMINI_MODEL || 'gemini-3.5-flash',
-        process.env.GEMINI_FALLBACK_MODEL,
-    ].filter(Boolean) as string[]
-
-    let lastError = ''
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
-
-    for (const model of models) {
-        for (let attempt = 0; attempt < 3 && !text; attempt++) {
-            try {
-                const response = await ai.models.generateContent({ model, contents: prompt })
-                text = response.text?.trim()
-            } catch (e) {
-                lastError = e instanceof Error ? e.message : 'unknown error'
-                const busy = lastError.includes('503') || lastError.includes('UNAVAILABLE')
-                if (!busy) break
-                await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
-            }
-        }
-        if (text) break
+    let joke: string
+    let imagePrompt: string
+    try {
+        const result = await askGemini(prompt)
+        joke = result.joke
+        imagePrompt = result.imagePrompt
+    } catch (e) {
+        const message = e instanceof Error ? e.message : 'Unknown error'
+        return NextResponse.json({ error: `AI error: ${message}` }, { status: 500 })
     }
 
-    if (!text) {
-        return NextResponse.json(
-            { error: lastError ? `AI error: ${lastError}` : 'The AI returned nothing. Try again.' },
-            { status: 502 }
-        )
+    // Meme picture: if anything goes wrong we still save the joke without one.
+    let imageUrl: string | null = null
+    const bytes = await makeMemeBytes(imagePrompt)
+    if (bytes) {
+        const path = `${user.id}/${Date.now()}.jpg`
+        const { error: uploadError } = await supabase.storage
+            .from('memes')
+            .upload(path, bytes, { contentType: 'image/jpeg' })
+        if (!uploadError) {
+            imageUrl = supabase.storage.from('memes').getPublicUrl(path).data.publicUrl
+        }
     }
 
     const { data, error } = await supabase
         .from('jokes')
-        .insert({ user_id: user.id, topic, prompt, content: text })
+        .insert({
+            user_id: user.id,
+            topic,
+            prompt: `${prompt}\n\nIMAGE PROMPT: ${imagePrompt}`,
+            content: joke,
+            image_url: imageUrl,
+        })
         .select()
         .single()
 
     if (error) {
-        return NextResponse.json({ error: `Save error: ${error.message}` }, { status: 500 })
+        return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ joke: data })

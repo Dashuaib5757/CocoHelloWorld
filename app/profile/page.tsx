@@ -11,6 +11,14 @@ const CURSOR_OPTIONS = [
     { value: 'pixel', label: '👾 Pixel Arrow' },
 ]
 
+const CREWS = [
+    { value: 'octopus', emoji: '🐙', name: 'Octopus', vibe: 'Overthinkers. Eight arms, zero chill.' },
+    { value: 'pufferfish', emoji: '🐡', name: 'Pufferfish', vibe: 'Dramatic. Inflates at the smallest thing.' },
+    { value: 'shark', emoji: '🦈', name: 'Shark', vibe: 'Savage. Dry humor with teeth.' },
+    { value: 'jellyfish', emoji: '🪼', name: 'Jellyfish', vibe: 'Chaotic. No brain, all vibes.' },
+    { value: 'crab', emoji: '🦀', name: 'Crab', vibe: 'Grumpy. Sideways takes only.' },
+]
+
 export default function ProfilePage() {
     const supabase = createClient()
     const router = useRouter()
@@ -19,6 +27,7 @@ export default function ProfilePage() {
     const [firstName, setFirstName] = useState('')
     const [lastName, setLastName] = useState('')
     const [cursorStyle, setCursorStyle] = useState('default')
+    const [crew, setCrew] = useState('')
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
     const [avatarFile, setAvatarFile] = useState<File | null>(null)
     const [saving, setSaving] = useState(false)
@@ -34,7 +43,7 @@ export default function ProfilePage() {
 
             const { data } = await supabase
                 .from('profiles')
-                .select('first_name, last_name, avatar_url, cursor_style')
+                .select('first_name, last_name, avatar_url, cursor_style, crew')
                 .eq('id', user.id)
                 .single()
 
@@ -42,6 +51,7 @@ export default function ProfilePage() {
                 setFirstName(data.first_name || '')
                 setLastName(data.last_name || '')
                 setCursorStyle(data.cursor_style || 'default')
+                setCrew(data.crew || '')
                 setAvatarUrl(data.avatar_url)
             }
             setLoading(false)
@@ -84,6 +94,7 @@ export default function ProfilePage() {
                 first_name: firstName,
                 last_name: lastName,
                 cursor_style: cursorStyle,
+                crew: crew || null,
                 avatar_url: newAvatarUrl,
             })
             .eq('id', user.id)
@@ -95,7 +106,7 @@ export default function ProfilePage() {
         } else {
             setMessage('Saved!')
             setAvatarUrl(newAvatarUrl)
-            router.push('/dashboard')
+            router.push('/ocean')
         }
     }
 
@@ -152,6 +163,55 @@ export default function ProfilePage() {
                     accept="image/*"
                     onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
                 />
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.2rem', fontWeight: 600 }}>
+                    Pick your crew
+                </label>
+                <p style={{ margin: '0 0 0.6rem', fontSize: '0.9rem' }}>
+                    Your crew badge shows on every joke you make, and crews compete on the Joke Ocean.
+                </p>
+                <div
+                    role="radiogroup"
+                    aria-label="Crew"
+                    style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.6rem' }}
+                >
+                    {CREWS.map((c) => {
+                        const selected = crew === c.value
+                        const choose = () => setCrew(selected ? '' : c.value)
+                        return (
+                            <div
+                                key={c.value}
+                                role="radio"
+                                aria-checked={selected}
+                                tabIndex={0}
+                                onClick={choose}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault()
+                                        choose()
+                                    }
+                                }}
+                                style={{
+                                    cursor: 'pointer',
+                                    padding: '0.7rem 0.8rem',
+                                    borderRadius: '16px',
+                                    border: selected ? '3px solid #ff5a5f' : '3px solid rgba(255,255,255,0.7)',
+                                    background: selected ? '#fff3f2' : 'rgba(255,255,255,0.85)',
+                                    boxShadow: selected ? '0 4px 0 #ff5a5f55' : '0 4px 0 rgba(0,0,0,0.08)',
+                                }}
+                            >
+                                <div style={{ fontSize: '1.6rem' }}>{c.emoji}</div>
+                                <div style={{ fontWeight: 700 }}>{c.name}</div>
+                                <div style={{ fontSize: '0.8rem' }}>{c.vibe}</div>
+                            </div>
+                        )
+                    })}
+                </div>
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem' }}>
+                    Click again to leave your crew.
+                </p>
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>

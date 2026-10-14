@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/server'
@@ -12,13 +11,10 @@ type Vote = { value: number; user_id: string }
 export default async function GeneratePage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-        redirect('/login')
-    }
 
     const { data: jokes } = await supabase
         .from('jokes')
-        .select('id, topic, content, created_at, joke_votes(value, user_id)')
+        .select('id, topic, content, image_url, created_at, joke_votes(value, user_id)')
         .order('created_at', { ascending: false })
         .limit(20)
 
@@ -26,7 +22,14 @@ export default async function GeneratePage() {
         <div style={{ padding: '2rem', maxWidth: '560px', margin: '0 auto' }}>
             <Link href="/">← Home</Link>
             <h1 style={{ fontSize: '2rem', margin: '1rem 0 1.5rem' }}>Jake Lab</h1>
-            <GenerateForm />
+
+            {user ? (
+                <GenerateForm />
+            ) : (
+                <p>
+                    <Link href="/login">Log in</Link> to make jokes and vote. Anyone can look around.
+                </p>
+            )}
 
             <h2 style={{ fontSize: '1.5rem', margin: '2.5rem 0 1rem' }}>Fresh from the lab</h2>
             {(!jokes || jokes.length === 0) && <p>No jokes yet. Be the first.</p>}
@@ -35,13 +38,29 @@ export default async function GeneratePage() {
                 {jokes?.map((joke, index) => {
                     const votes = (joke.joke_votes ?? []) as Vote[]
                     const score = votes.reduce((sum, v) => sum + v.value, 0)
-                    const mine = votes.find((v) => v.user_id === user.id)?.value ?? 0
+                    const mine = user ? votes.find((v) => v.user_id === user.id)?.value ?? 0 : 0
                     return (
                         <li
                             key={joke.id}
                             className="rule-card"
                             style={{ '--accent': COLORS[index % COLORS.length] } as CSSProperties}
                         >
+                            {joke.image_url && (
+                                <img
+                                    src={joke.image_url}
+                                    alt={`Meme for the joke about ${joke.topic}`}
+                                    loading="lazy"
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: 320,
+                                        aspectRatio: '1 / 1',
+                                        objectFit: 'cover',
+                                        borderRadius: 16,
+                                        display: 'block',
+                                        marginBottom: '0.8rem',
+                                    }}
+                                />
+                            )}
                             <small>Topic: {joke.topic}</small>
                             <p style={{ margin: '0.5rem 0 0' }}>{joke.content}</p>
                             <VoteButtons jokeId={joke.id} initialScore={score} initialVote={mine} />
